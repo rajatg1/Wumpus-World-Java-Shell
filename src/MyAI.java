@@ -1,5 +1,7 @@
 import java.util.Stack;
 
+import Agent.Action;
+
 enum Directions{
 	EAST, NORTH, WEST, SOUTH
 }
@@ -8,14 +10,16 @@ public class MyAI extends Agent
 {
 	int Xmax;
 	int Ymax;
+	boolean directionFlag;
+	boolean bumpFlag;
+	boolean goldFlag;
 	
 	private State myAgentWorld[][];
 	
 	private MyAgent myAgent;
 	
-	boolean directionFlag = false;
+	
 	Stack<State> path = new Stack<State>();
-	Stack<State> unExplored = new Stack<State>();
 	
 	private class State{
 		int X;
@@ -25,11 +29,18 @@ public class MyAI extends Agent
 		boolean isWumpusThere;
 		boolean isPitThere;
 		
-		State(){
+		State(int x, int y){
+			this.X = x;
+			this.Y = y;
 			isVisited = false;
 			isSafe = false;
 			isWumpusThere = false;
 			isPitThere = false;
+		}
+		
+		@Override
+		public String toString(){
+			return String.format("X: "+this.X+"\tY: "+this.Y+"\tVisited:"+this.isVisited+"\tSafe:"+this.isSafe);
 		}
 	}
 	
@@ -44,6 +55,10 @@ public class MyAI extends Agent
 			this.currentDirection = Directions.EAST;
 		}
 		
+		@Override
+		public String toString(){
+			return String.format("X:"+this.X+" Y:"+this.Y+" Dir:"+this.currentDirection);
+		}
 	}
 	
 	
@@ -51,15 +66,18 @@ public class MyAI extends Agent
 	{
 		myAgentWorld = new State[10][10];
 		
-		for(int i=0; i<10; i++){
-			for(int j=0; j<10; j++){
-				myAgentWorld[i][j] = new State();
+		for(int y=0; y<10; y++){
+			for(int x=0; x<10; x++){
+				myAgentWorld[y][x] = new State(y,x);
 			}
 		}
 		
 		myAgent = new MyAgent(); 
-		Xmax = 9;
-		Ymax = 9;
+		Xmax = 10;
+		Ymax = 10;
+		directionFlag = false;
+		bumpFlag = false;
+		goldFlag = false;
 	}
 	
 
@@ -71,39 +89,173 @@ public class MyAI extends Agent
 		boolean bump,
 		boolean scream
 	)
-	{
-		// Edge Case, if danger at the starting block
-		if((stench || breeze) && (myAgent.X == 0 && myAgent.Y == 0))
+	{		
+		// Edge Case, if danger at the starting block		
+		if((stench || breeze) && (myAgent.X == 0 && myAgent.Y == 0)){			
+			//printStatus();
 			return Action.CLIMB;
-		
-		// Safe Cell, push path and unexplored cells in stacks and Mark Neighbouring cells safe
-		if(!stench && !breeze){
-			markNeighboursSafe(myAgent.X, myAgent.Y);
-			path.push(myAgentWorld[myAgent.X][myAgent.Y]);
-			unExplored.push(myAgentWorld[myAgent.X][myAgent.Y+1]);
-			myAgent.X += 1;
-			return Action.FORWARD;
 		}
 		
-		// Danger Sensed, Backtrace using path stack
-		if(stench || breeze){
-			State state = path.peek();
-			Action currAction = getNextAction(state, myAgent);
-			
-			// Turn Action, Update Agent Direction
-			if(currAction != Action.FORWARD){
-				editAgentDirection(myAgent, currAction);
+		if(glitter){
+			goldFlag = true;
+			return Action.GRAB;
+		}
+		
+		if(goldFlag){
+			if(path.isEmpty()){
+				return Action.CLIMB;
 			}
-			// Forward Action, Update Agent Coordinates as state Coordinates
-			else{
+			
+			State state = path.peek();
+			//System.out.println(state.toString());
+			//System.out.println(myAgent.toString());
+			Action action = getNextAction(state, myAgent);
+			
+			if(action == Action.FORWARD){
 				myAgent.X = state.X;
 				myAgent.Y = state.Y;
+				path.pop();
 			}
-			return currAction;
+			else{
+				editAgentDirection(myAgent, action);
+			}
+			
+			return action;
 		}
+		
+		if(bump){
+			bumpFlag = true;
+			State state = path.pop();
+			
+			myAgent.X = state.X;
+			myAgent.Y = state.Y;
+			
+			if(myAgent.currentDirection == Directions.EAST){
+				Xmax = myAgent.X;
+			}
+			if(myAgent.currentDirection == Directions.NORTH){
+				Ymax = myAgent.Y;
+			}			
+		}
+
+		boolean c1 = (!stench && !breeze);
+		boolean c2 = (stench || breeze);
+		if(c1 || c2){			
+			if(c1){
+				markNeighborsSafe(myAgent.X, myAgent.Y);
+			}
+			
+			//mark itself safe and visited
+			markCellSafeAndVisited(myAgent.X, myAgent.Y);
+			
+			//find the next adjacent unvisited safe cell
+			State nextUnvisitedSafeCell = getNextUnvisitedSafeCell(myAgent.X, myAgent.Y);
+			
+			if(path.isEmpty() && (nextUnvisitedSafeCell == null)){
+				return Action.CLIMB;
+			}
+			
+			if(nextUnvisitedSafeCell == null){
+				State destState = path.peek();
+				Action currAction = getNextAction(destState, myAgent);
+				
+				if(currAction != Action.FORWARD){
+					editAgentDirection(myAgent, currAction);
+				}
+				// Forward Action, Update Agent Coordinates as state Coordinates
+				else{
+					myAgent.X = destState.X;
+					myAgent.Y = destState.Y;
+					path.pop();
+				}
+				//printStatus();
+				return currAction;
+			}
+			else{
+				Action currAction = getNextAction(nextUnvisitedSafeCell, myAgent);
+				
+				if(currAction != Action.FORWARD){
+					editAgentDirection(myAgent, currAction);
+				}
+				// Forward Action, Update Agent Coordinates as state Coordinates
+				else{
+					path.push(myAgentWorld[myAgent.X][myAgent.Y]);
+					myAgent.X = nextUnvisitedSafeCell.X;
+					myAgent.Y = nextUnvisitedSafeCell.Y;
+				}
+				//printStatus();
+				return currAction;
+			}
+		}
+		
+		
+		if(path.isEmpty()){
+			//printStatus();
+			return Action.CLIMB;
+		}
+		//printStatus();
 		return Action.CLIMB;
 	}	
 	
+	private void printStatus() {
+		// TODO Auto-generated method stub
+		//agent
+		System.out.println("Agent:");
+		System.out.println(myAgent.toString());
+		
+		System.out.println();
+		System.out.println("World:");
+		
+		for(int y=0; y<10; y++){
+			for(int x=0; x<10; x++){
+				System.out.println(myAgentWorld[y][x].toString());
+			}
+		}
+	}
+
+
+	private State getNextUnvisitedSafeCell(int x, int y) {
+		// TODO Auto-generated method stub
+		//east
+		if(x+1 < Xmax && x+1 >= 0){
+			if((myAgentWorld[x+1][y].isSafe == true) && (myAgentWorld[x+1][y].isVisited == false)){
+				return myAgentWorld[x+1][y];
+			}
+		}
+
+		//north
+		if(y+1 < Ymax && y+1 >= 0){
+			if((myAgentWorld[x][y+1].isSafe == true) && (myAgentWorld[x][y+1].isVisited == false)){
+				return myAgentWorld[x][y+1];
+			}
+		}
+		
+		//west
+		if(x-1 < Xmax && x-1 >= 0){
+			if((myAgentWorld[x-1][y].isSafe == true) && (myAgentWorld[x-1][y].isVisited == false)){
+				return myAgentWorld[x-1][y];
+			}
+		}
+		
+		//south
+		if(y-1 < Ymax && y-1 >= 0){
+			if((myAgentWorld[x][y-1].isSafe == true) && (myAgentWorld[x][y-1].isVisited == false)){
+				return myAgentWorld[x][y-1];
+			}
+		}
+		
+		return null;
+	}
+
+
+	private void markCellSafeAndVisited(int x, int y) {
+		// TODO Auto-generated method stub
+		State currentCell = myAgentWorld[x][y];
+		currentCell.isSafe = true;
+		currentCell.isVisited = true;
+	}
+
+
 	private void editAgentDirection(MyAgent myAgent, Action currAction){
 		int val = myAgent.currentDirection.ordinal();
 		if(currAction == Action.TURN_LEFT){
@@ -180,23 +332,18 @@ public class MyAI extends Agent
 			}
 		}
 		
-		if(desiredDirection.ordinal() == myAgent.currentDirection.ordinal()){
+		if(desiredDirection == myAgent.currentDirection){
 			return Action.FORWARD;
 		}
-		if((desiredDirection.ordinal() - myAgent.currentDirection.ordinal() == 1)  && !directionFlag){
-			return Action.TURN_RIGHT;
-		}
+		
 		directionFlag = true;
 		return Action.TURN_LEFT;
 	}
 
 
-	private void markNeighboursSafe(int x, int y) {
+	private void markNeighborsSafe(int x, int y) {
 		// TODO Auto-generated method stub
-		State currentCell = myAgentWorld[x][y];
-		currentCell.isSafe = true;
-		currentCell.isVisited = true;
-		
+		//System.out.println("inside neigh:"+x+" "+Xmax+" "+y+" "+Ymax);
 		if(x+1 < Xmax && x+1 >= 0){
 			myAgentWorld[x+1][y].isSafe = true;
 		}
