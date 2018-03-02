@@ -1,7 +1,5 @@
 import java.util.Stack;
 
-import Agent.Action;
-
 enum Directions{
 	EAST, NORTH, WEST, SOUTH
 }
