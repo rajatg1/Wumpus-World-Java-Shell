@@ -13,7 +13,6 @@ public class MyAI extends Agent
 	boolean goldFlag;
 	
 	private State myAgentWorld[][];
-	
 	private MyAgent myAgent;
 	
 	
@@ -34,11 +33,6 @@ public class MyAI extends Agent
 			isSafe = false;
 			isWumpusThere = false;
 			isPitThere = false;
-		}
-		
-		@Override
-		public String toString(){
-			return String.format("X: "+this.X+"\tY: "+this.Y+"\tVisited:"+this.isVisited+"\tSafe:"+this.isSafe);
 		}
 	}
 	
@@ -122,18 +116,18 @@ public class MyAI extends Agent
 		}
 		
 		if(bump){
-			bumpFlag = true;
+			//bumpFlag = true;
 			State state = path.pop();
-			
-			myAgent.X = state.X;
-			myAgent.Y = state.Y;
 			
 			if(myAgent.currentDirection == Directions.EAST){
 				Xmax = myAgent.X;
 			}
 			if(myAgent.currentDirection == Directions.NORTH){
 				Ymax = myAgent.Y;
-			}			
+			}	
+
+			myAgent.X = state.X;
+			myAgent.Y = state.Y;	
 		}
 
 		boolean c1 = (!stench && !breeze);
@@ -333,9 +327,32 @@ public class MyAI extends Agent
 		if(desiredDirection == myAgent.currentDirection){
 			return Action.FORWARD;
 		}
+
+		if(myAgent.currentDirection == Directions.EAST){
+			if(desiredDirection == Directions.NORTH){
+				return Action.TURN_LEFT;
+			}
+		}
+
+		if(myAgent.currentDirection == Directions.NORTH){
+			if(desiredDirection == Directions.WEST){
+				return Action.TURN_LEFT;
+			}
+		}
+
+		if(myAgent.currentDirection == Directions.WEST){
+			if(desiredDirection == Directions.SOUTH){
+				return Action.TURN_LEFT;
+			}
+		}
+
+		if(myAgent.currentDirection == Directions.SOUTH){
+			if(desiredDirection == Directions.EAST){
+				return Action.TURN_LEFT;
+			}
+		}
 		
-		directionFlag = true;
-		return Action.TURN_LEFT;
+		return Action.TURN_RIGHT;		
 	}
 
 
