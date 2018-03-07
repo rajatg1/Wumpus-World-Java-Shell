@@ -1,4 +1,4 @@
-import java.util.Stack;
+import java.util.*;
 
 enum Directions{
 	EAST, NORTH, WEST, SOUTH
@@ -11,6 +11,8 @@ public class MyAI extends Agent
 	boolean directionFlag;
 	boolean bumpFlag;
 	boolean goldFlag;
+	boolean screamFlag;
+	int arrow;
 	
 	private State myAgentWorld[][];
 	private MyAgent myAgent;
@@ -21,6 +23,7 @@ public class MyAI extends Agent
 	private class State{
 		int X;
 		int Y;
+		int cost;
 		boolean isVisited;
 		boolean isSafe;
 		boolean isWumpusThere;
@@ -33,6 +36,7 @@ public class MyAI extends Agent
 			isSafe = false;
 			isWumpusThere = false;
 			isPitThere = false;
+			this.cost = Integer.MAX_VALUE;
 		}
 	}
 	
@@ -70,6 +74,8 @@ public class MyAI extends Agent
 		directionFlag = false;
 		bumpFlag = false;
 		goldFlag = false;
+		screamFlag = false;
+		arrow = 1;
 	}
 	
 
@@ -81,13 +87,12 @@ public class MyAI extends Agent
 		boolean bump,
 		boolean scream
 	)
-	{		
-		// Edge Case, if danger at the starting block		
-		if((stench || breeze) && (myAgent.X == 0 && myAgent.Y == 0)){			
-			//printStatus();
-			return Action.CLIMB;
+	{
+		if(scream){
+			screamFlag = true;
+			arrow = 0;
 		}
-		
+
 		if(glitter){
 			goldFlag = true;
 			return Action.GRAB;
@@ -113,8 +118,32 @@ public class MyAI extends Agent
 			}
 			
 			return action;
+			
+			/*
+			//Dijstra's
+			PriorityQueue<State> pq = new PriorityQueue<State>(new Comparator<State>(){
+				@Override
+				public int compare(State s1, State s2){
+					if(s1.cost <= s2.cost){
+						return -1;
+					}
+					return 1;
+				}
+			});
+			*/
 		}
 		
+		// Edge Case, if danger at the starting block		
+		if((breeze) && (myAgent.X == 0 && myAgent.Y == 0)){			
+			//printStatus();
+			return Action.CLIMB;
+		}
+
+		if((stench) && (arrow != 0) && !screamFlag){
+			arrow--;
+			return Action.SHOOT;
+		}
+
 		if(bump){
 			//bumpFlag = true;
 			State state = path.pop();
@@ -137,11 +166,17 @@ public class MyAI extends Agent
 				markNeighborsSafe(myAgent.X, myAgent.Y);
 			}
 			
+			if(c2){
+				if(screamFlag && stench && !breeze){
+					markNeighborsSafe(myAgent.X, myAgent.Y);
+				}
+			}
+
 			//mark itself safe and visited
 			markCellSafeAndVisited(myAgent.X, myAgent.Y);
 			
 			//find the next adjacent unvisited safe cell
-			State nextUnvisitedSafeCell = getNextUnvisitedSafeCell(myAgent.X, myAgent.Y);
+			State nextUnvisitedSafeCell = getNextUnvisitedSafeCell(myAgent.X, myAgent.Y, myAgent.currentDirection);
 			
 			if(path.isEmpty() && (nextUnvisitedSafeCell == null)){
 				return Action.CLIMB;
@@ -206,36 +241,119 @@ public class MyAI extends Agent
 	}
 
 
-	private State getNextUnvisitedSafeCell(int x, int y) {
-		// TODO Auto-generated method stub
+	private State goEast(int x, int y){
 		//east
 		if(x+1 < Xmax && x+1 >= 0){
 			if((myAgentWorld[x+1][y].isSafe == true) && (myAgentWorld[x+1][y].isVisited == false)){
 				return myAgentWorld[x+1][y];
 			}
 		}
+		return null;
+	}
 
+	private State goNorth(int x, int y){
 		//north
 		if(y+1 < Ymax && y+1 >= 0){
 			if((myAgentWorld[x][y+1].isSafe == true) && (myAgentWorld[x][y+1].isVisited == false)){
 				return myAgentWorld[x][y+1];
 			}
 		}
-		
+		return null;
+	}
+
+	private State goWest(int x, int y){
 		//west
 		if(x-1 < Xmax && x-1 >= 0){
 			if((myAgentWorld[x-1][y].isSafe == true) && (myAgentWorld[x-1][y].isVisited == false)){
 				return myAgentWorld[x-1][y];
 			}
 		}
-		
+		return null;
+	}
+
+	private State goSouth(int x, int y){
 		//south
 		if(y-1 < Ymax && y-1 >= 0){
 			if((myAgentWorld[x][y-1].isSafe == true) && (myAgentWorld[x][y-1].isVisited == false)){
 				return myAgentWorld[x][y-1];
 			}
 		}
-		
+		return null;
+	}
+
+	private State getNextUnvisitedSafeCell(int x, int y, Directions agentsCurrentDirection) {
+		if(agentsCurrentDirection == Directions.EAST){
+			State east = goEast(x, y);
+			if(east != null){
+				return east;
+			}
+			State north = goNorth(x, y);
+			if(north != null){
+				return north;
+			}
+			State south = goSouth(x, y);
+			if(south != null){
+				return south;
+			}
+			State west = goWest(x, y);
+			if(west != null){
+				return west;
+			}
+		}
+		else if(agentsCurrentDirection == Directions.WEST){
+			State west = goWest(x, y);
+			if(west != null){
+				return west;
+			}
+			State north = goNorth(x, y);
+			if(north != null){
+				return north;
+			}
+			State south = goSouth(x, y);
+			if(south != null){
+				return south;
+			}
+			State east = goEast(x, y);
+			if(east != null){
+				return east;
+			}
+		}
+		else if(agentsCurrentDirection == Directions.NORTH){
+			State north = goNorth(x, y);
+			if(north != null){
+				return north;
+			}
+			State west = goWest(x, y);
+			if(west != null){
+				return west;
+			}
+			State east = goEast(x, y);
+			if(east != null){
+				return east;
+			}
+			State south = goSouth(x, y);
+			if(south != null){
+				return south;
+			}
+		}
+		else{
+			State south = goSouth(x, y);
+			if(south != null){
+				return south;
+			}
+			State west = goWest(x, y);
+			if(west != null){
+				return west;
+			}
+			State east = goEast(x, y);
+			if(east != null){
+				return east;
+			}
+			State north = goNorth(x, y);
+			if(north != null){
+				return north;
+			}
+		}
 		return null;
 	}
 
@@ -245,6 +363,7 @@ public class MyAI extends Agent
 		State currentCell = myAgentWorld[x][y];
 		currentCell.isSafe = true;
 		currentCell.isVisited = true;
+		myAgentWorld[x][y].cost = x+y;
 	}
 
 
@@ -361,15 +480,19 @@ public class MyAI extends Agent
 		//System.out.println("inside neigh:"+x+" "+Xmax+" "+y+" "+Ymax);
 		if(x+1 < Xmax && x+1 >= 0){
 			myAgentWorld[x+1][y].isSafe = true;
+			myAgentWorld[x+1][y].cost = x+1+y;
 		}
 		if(x-1 < Xmax && x-1 >= 0){
 			myAgentWorld[x-1][y].isSafe = true;
+			myAgentWorld[x-1][y].cost = x-1+y;
 		}
 		if(y+1 < Ymax && y+1 >= 0){
 			myAgentWorld[x][y+1].isSafe = true;
+			myAgentWorld[x][y+1].cost = x+y+1;
 		}
 		if(y-1 < Ymax && y-1 >= 0){
 			myAgentWorld[x][y-1].isSafe = true;
+			myAgentWorld[x][y-1].cost = x+y-1;
 		}
 	}
 }
