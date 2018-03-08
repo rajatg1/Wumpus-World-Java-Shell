@@ -6,9 +6,10 @@ enum Directions{
 
 public class MyAI extends Agent
 {
+	//caveBoundary_X
 	int Xmax;
+	//caveBoundary_Y
 	int Ymax;
-	boolean directionFlag;
 	boolean bumpFlag;
 	boolean goldFlag;
 	boolean screamFlag;
@@ -27,7 +28,6 @@ public class MyAI extends Agent
 		boolean isVisited;
 		boolean isSafe;
 		boolean isWumpusThere;
-		boolean isPitThere;
 		
 		State(int x, int y){
 			this.X = x;
@@ -35,7 +35,6 @@ public class MyAI extends Agent
 			isVisited = false;
 			isSafe = false;
 			isWumpusThere = false;
-			isPitThere = false;
 			this.cost = Integer.MAX_VALUE;
 		}
 	}
@@ -71,7 +70,6 @@ public class MyAI extends Agent
 		myAgent = new MyAgent(); 
 		Xmax = 10;
 		Ymax = 10;
-		directionFlag = false;
 		bumpFlag = false;
 		goldFlag = false;
 		screamFlag = false;
@@ -141,6 +139,9 @@ public class MyAI extends Agent
 
 		if((stench) && (arrow != 0) && !screamFlag){
 			arrow--;
+			if(!breeze){
+				markNextCellSafe(myAgent);
+			}
 			return Action.SHOOT;
 		}
 
@@ -222,7 +223,45 @@ public class MyAI extends Agent
 		}
 		//printStatus();
 		return Action.CLIMB;
-	}	
+	}
+	
+	private void markNextCellSafe(MyAgent agent){
+		
+		int x = agent.X;
+		int y = agent.Y;
+		
+		switch(agent.currentDirection){
+		
+			case EAST:{
+				if(x+1 < Xmax && x+1 >= 0){
+					myAgentWorld[x+1][y].isSafe = true;
+					myAgentWorld[x+1][y].cost = x+1+y;
+				}
+				break;
+			}
+			case WEST:{
+				if(x-1 < Xmax && x-1 >= 0){
+					myAgentWorld[x-1][y].isSafe = true;
+					myAgentWorld[x-1][y].cost = x-1+y;
+				}
+				break;
+			}
+			case NORTH:{
+				if(y+1 < Ymax && y+1 >= 0){
+					myAgentWorld[x][y+1].isSafe = true;
+					myAgentWorld[x][y+1].cost = x+y+1;
+				}
+				break;
+			}
+			case SOUTH:{
+				if(y-1 < Ymax && y-1 >= 0){
+					myAgentWorld[x][y-1].isSafe = true;
+					myAgentWorld[x][y-1].cost = x+y-1;
+				}
+				break;
+			}
+		}
+	}
 	
 	private void printStatus() {
 		// TODO Auto-generated method stub
@@ -239,7 +278,6 @@ public class MyAI extends Agent
 			}
 		}
 	}
-
 
 	private State goEast(int x, int y){
 		//east
@@ -357,7 +395,6 @@ public class MyAI extends Agent
 		return null;
 	}
 
-
 	private void markCellSafeAndVisited(int x, int y) {
 		// TODO Auto-generated method stub
 		State currentCell = myAgentWorld[x][y];
@@ -365,7 +402,6 @@ public class MyAI extends Agent
 		currentCell.isVisited = true;
 		myAgentWorld[x][y].cost = x+y;
 	}
-
 
 	private void editAgentDirection(MyAgent myAgent, Action currAction){
 		int val = myAgent.currentDirection.ordinal();
@@ -414,7 +450,6 @@ public class MyAI extends Agent
 		return null;
 
 	}
-
 
 	private Action getNextAction(State state, MyAgent myAgent) {
 		// TODO Auto-generated method stub
@@ -474,10 +509,7 @@ public class MyAI extends Agent
 		return Action.TURN_RIGHT;		
 	}
 
-
 	private void markNeighborsSafe(int x, int y) {
-		// TODO Auto-generated method stub
-		//System.out.println("inside neigh:"+x+" "+Xmax+" "+y+" "+Ymax);
 		if(x+1 < Xmax && x+1 >= 0){
 			myAgentWorld[x+1][y].isSafe = true;
 			myAgentWorld[x+1][y].cost = x+1+y;
