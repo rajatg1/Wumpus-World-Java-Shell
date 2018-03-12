@@ -20,12 +20,15 @@ public class MyAI extends Agent
 	
 	
 	Stack<State> path = new Stack<State>();
+	// Returning Shortest Path DFS stack (after grabbing gold)
+	Stack<State> goldStack = new Stack<State>();
 	
 	private class State{
 		int X;
 		int Y;
 		int cost;
 		boolean isVisited;
+		boolean isVisitedReturn;		// isVistedReturnFlag for returning shortest path DFS
 		boolean isSafe;
 		boolean isWumpusThere;
 		
@@ -33,6 +36,7 @@ public class MyAI extends Agent
 			this.X = x;
 			this.Y = y;
 			isVisited = false;
+			isVisitedReturn = false;
 			isSafe = false;
 			isWumpusThere = false;
 			this.cost = Integer.MAX_VALUE;
@@ -86,17 +90,71 @@ public class MyAI extends Agent
 		boolean scream
 	)
 	{
+		// Logic for scream
 		if(scream){
 			screamFlag = true;
 			arrow = 0;
 		}
 
+		// Logic for glitter
 		if(glitter){
 			goldFlag = true;
 			return Action.GRAB;
 		}
 		
+		// Logic for shortest path returning DFS after grabbing gold
 		if(goldFlag){
+			if(myAgent.X == 0 && myAgent.Y == 0)
+				return Action.CLIMB;
+			
+			// Mark Own Cell Safe
+			markCellSafeAndVisitedReturn(myAgent.X, myAgent.Y);
+			
+			// Mark Neighbours safe, it will help in shortest path.
+			if((!breeze && !stench) || (screamFlag && stench && !breeze)){
+				markNeighborsSafe(myAgent.X, myAgent.Y);
+			}
+			
+			// Start Shortest DFS from here
+			State nextShortestCell = getShortestPathNeighbour(myAgent.X, myAgent.Y, myAgent.currentDirection);
+			
+			// If no more neighbours to explore, backtrace to previous node 
+			if(nextShortestCell == null) {
+				State destState = goldStack.peek();
+				Action currAction = getNextAction(destState, myAgent);
+				
+				if(currAction != Action.FORWARD){
+					editAgentDirection(myAgent, currAction);
+				}
+				// Forward Action, Update Agent Coordinates as state Coordinates
+				else{
+					myAgent.X = destState.X;
+					myAgent.Y = destState.Y;
+					goldStack.pop();
+				}
+				//printStatus();
+				return currAction;
+			}
+			else {
+				
+				Action currAction = getNextAction(nextShortestCell, myAgent);
+				
+				if(currAction != Action.FORWARD){
+					editAgentDirection(myAgent, currAction);
+				}
+				// Forward Action, Update Agent Coordinates as state Coordinates
+				else{
+					// Push in stack and move forward into the depth
+					goldStack.push(myAgentWorld[myAgent.X][myAgent.Y]);
+					myAgent.X = nextShortestCell.X;
+					myAgent.Y = nextShortestCell.Y;
+				}
+				
+				return currAction;
+			}
+			
+			// old code below
+			/*
 			if(path.isEmpty()){
 				return Action.CLIMB;
 			}
@@ -116,8 +174,11 @@ public class MyAI extends Agent
 			}
 			
 			return action;
+			*/
 			
 			/*
+			 * 
+			 *  possible extension
 			//Dijstra's
 			PriorityQueue<State> pq = new PriorityQueue<State>(new Comparator<State>(){
 				@Override
@@ -131,12 +192,13 @@ public class MyAI extends Agent
 			*/
 		}
 		
-		// Edge Case, if danger at the starting block		
+		// Edge Case, if breeze at the starting position, climb out directly		
 		if((breeze) && (myAgent.X == 0 && myAgent.Y == 0)){			
 			//printStatus();
 			return Action.CLIMB;
 		}
 
+		// Logic for only stench and arrow shoot
 		if((stench) && (arrow != 0) && !screamFlag){
 			arrow--;
 			if(!breeze){
@@ -145,6 +207,7 @@ public class MyAI extends Agent
 			return Action.SHOOT;
 		}
 
+		// Logic for bump
 		if(bump){
 			//bumpFlag = true;
 			State state = path.pop();
@@ -160,6 +223,7 @@ public class MyAI extends Agent
 			myAgent.Y = state.Y;	
 		}
 
+		// Logic for stench and breeze
 		boolean c1 = (!stench && !breeze);
 		boolean c2 = (stench || breeze);
 		if(c1 || c2){			
@@ -225,6 +289,7 @@ public class MyAI extends Agent
 		return Action.CLIMB;
 	}
 	
+	// mark adjacent next (based on the agent direction) cell safe 
 	private void markNextCellSafe(MyAgent agent){
 		
 		int x = agent.X;
@@ -263,8 +328,8 @@ public class MyAI extends Agent
 		}
 	}
 	
+	// print function for debugging
 	private void printStatus() {
-		// TODO Auto-generated method stub
 		//agent
 		System.out.println("Agent:");
 		System.out.println(myAgent.toString());
@@ -278,7 +343,58 @@ public class MyAI extends Agent
 			}
 		}
 	}
+	
+	// get Next Unvisited Shorted Path Neighbour for returning DFS after grabbing gold
+	private State getShortestPathNeighbour(int x, int y, Directions agentsCurrentDirection) {
+		
+		// if facing west, give preference to west first.
+		if(agentsCurrentDirection == Directions.WEST) {
+			// West
+			if(x-1 < Xmax && x-1 >= 0){
+				if((myAgentWorld[x-1][y].isSafe == true) && (myAgentWorld[x-1][y].isVisitedReturn == false)){
+					return myAgentWorld[x-1][y];
+				}
+			}
+			// South 
+			if(y-1 < Ymax && y-1 >= 0){
+				if((myAgentWorld[x][y-1].isSafe == true) && (myAgentWorld[x][y-1].isVisitedReturn == false)){
+					return myAgentWorld[x][y-1];
+				}
+			}
+		}
+		else{	// if facing south, give preference to south first.
+			// South 
+			if(y-1 < Ymax && y-1 >= 0){
+				if((myAgentWorld[x][y-1].isSafe == true) && (myAgentWorld[x][y-1].isVisitedReturn == false)){
+					return myAgentWorld[x][y-1];
+				}
+			}
+			// West
+			if(x-1 < Xmax && x-1 >= 0){
+				if((myAgentWorld[x-1][y].isSafe == true) && (myAgentWorld[x-1][y].isVisitedReturn == false)){
+					return myAgentWorld[x-1][y];
+				}
+			}
+		}
+		
+		//East
+		if(x+1 < Xmax && x+1 >= 0){
+			if((myAgentWorld[x+1][y].isSafe == true) && (myAgentWorld[x+1][y].isVisitedReturn == false)){
+				return myAgentWorld[x+1][y];
+			}
+		}
+		
+		// North
+		if(y+1 < Ymax && y+1 >= 0){
+			if((myAgentWorld[x][y+1].isSafe == true) && (myAgentWorld[x][y+1].isVisitedReturn == false)){
+				return myAgentWorld[x][y+1];
+			}
+		}
+		
+		return null;
+	}
 
+	// Helper Functions
 	private State goEast(int x, int y){
 		//east
 		if(x+1 < Xmax && x+1 >= 0){
@@ -289,6 +405,7 @@ public class MyAI extends Agent
 		return null;
 	}
 
+	// Helper Functions
 	private State goNorth(int x, int y){
 		//north
 		if(y+1 < Ymax && y+1 >= 0){
@@ -299,6 +416,7 @@ public class MyAI extends Agent
 		return null;
 	}
 
+	// Helper Functions
 	private State goWest(int x, int y){
 		//west
 		if(x-1 < Xmax && x-1 >= 0){
@@ -309,6 +427,7 @@ public class MyAI extends Agent
 		return null;
 	}
 
+	// Helper Functions
 	private State goSouth(int x, int y){
 		//south
 		if(y-1 < Ymax && y-1 >= 0){
@@ -319,6 +438,7 @@ public class MyAI extends Agent
 		return null;
 	}
 
+	// get Next Unvisited Safe Cell for DFS
 	private State getNextUnvisitedSafeCell(int x, int y, Directions agentsCurrentDirection) {
 		if(agentsCurrentDirection == Directions.EAST){
 			State east = goEast(x, y);
@@ -395,14 +515,23 @@ public class MyAI extends Agent
 		return null;
 	}
 
+	// Mark isVisited and isSafe flags as true
 	private void markCellSafeAndVisited(int x, int y) {
-		// TODO Auto-generated method stub
 		State currentCell = myAgentWorld[x][y];
 		currentCell.isSafe = true;
 		currentCell.isVisited = true;
 		myAgentWorld[x][y].cost = x+y;
 	}
+	
+	// Mark isVisitedReturn and isSafe flags as true
+	private void markCellSafeAndVisitedReturn(int x, int y) {
+		State currentCell = myAgentWorld[x][y];
+		currentCell.isSafe = true;
+		currentCell.isVisitedReturn = true;
+		myAgentWorld[x][y].cost = x+y;
+	}
 
+	// editAgentDirection on the basis of rotation action
 	private void editAgentDirection(MyAgent myAgent, Action currAction){
 		int val = myAgent.currentDirection.ordinal();
 		if(currAction == Action.TURN_LEFT){
@@ -432,7 +561,6 @@ public class MyAI extends Agent
 	}
 	
 	private Directions getDirections(int val) {
-		// TODO Auto-generated method stub
 		switch(val){
 			case 0: {
 				return Directions.EAST;
@@ -451,6 +579,7 @@ public class MyAI extends Agent
 
 	}
 
+	// getNextaction of agent on the basis of next adjacent state
 	private Action getNextAction(State state, MyAgent myAgent) {
 		// TODO Auto-generated method stub
 		
@@ -509,6 +638,7 @@ public class MyAI extends Agent
 		return Action.TURN_RIGHT;		
 	}
 
+	// Mark all neighbours safe
 	private void markNeighborsSafe(int x, int y) {
 		if(x+1 < Xmax && x+1 >= 0){
 			myAgentWorld[x+1][y].isSafe = true;
