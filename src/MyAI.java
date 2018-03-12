@@ -12,13 +12,19 @@ public class MyAI extends Agent
 	int Ymax;
 	boolean bumpFlag;
 	boolean goldFlag;
+	// Flag is set when wumpus is killed by an arrow
 	boolean screamFlag;
+	// Flag is set when wumpus is located using knowledge base created
+	boolean wumpusLocatedFlag;
 	int arrow;
+	// Wumpus location
+	int Wumpus_X;
+	int Wumpus_Y;
 	
 	private State myAgentWorld[][];
 	private MyAgent myAgent;
 	
-	
+	// Gold Finding Forward DFS Stack
 	Stack<State> path = new Stack<State>();
 	// Returning Shortest Path DFS stack (after grabbing gold)
 	Stack<State> goldStack = new Stack<State>();
@@ -26,20 +32,21 @@ public class MyAI extends Agent
 	private class State{
 		int X;
 		int Y;
-		int cost;
 		boolean isVisited;
 		boolean isVisitedReturn;		// isVistedReturnFlag for returning shortest path DFS
-		boolean isSafe;
-		boolean isWumpusThere;
+		boolean isSafe;				// whether cell is safe or not
+		int wumpusRiskFactor;		// this is used to pin-point the wumpus location
 		
 		State(int x, int y){
 			this.X = x;
 			this.Y = y;
+			Wumpus_X = -1;
+			Wumpus_Y = -1;
 			isVisited = false;
 			isVisitedReturn = false;
 			isSafe = false;
-			isWumpusThere = false;
-			this.cost = Integer.MAX_VALUE;
+			wumpusLocatedFlag = false;
+			wumpusRiskFactor = 0;	// Risk can be 0 to 4, -1 for no risk (that means safe block)
 		}
 	}
 	
@@ -132,7 +139,6 @@ public class MyAI extends Agent
 					myAgent.Y = destState.Y;
 					goldStack.pop();
 				}
-				//printStatus();
 				return currAction;
 			}
 			else {
@@ -153,43 +159,6 @@ public class MyAI extends Agent
 				return currAction;
 			}
 			
-			// old code below
-			/*
-			if(path.isEmpty()){
-				return Action.CLIMB;
-			}
-			
-			State state = path.peek();
-			//System.out.println(state.toString());
-			//System.out.println(myAgent.toString());
-			Action action = getNextAction(state, myAgent);
-			
-			if(action == Action.FORWARD){
-				myAgent.X = state.X;
-				myAgent.Y = state.Y;
-				path.pop();
-			}
-			else{
-				editAgentDirection(myAgent, action);
-			}
-			
-			return action;
-			*/
-			
-			/*
-			 * 
-			 *  possible extension
-			//Dijstra's
-			PriorityQueue<State> pq = new PriorityQueue<State>(new Comparator<State>(){
-				@Override
-				public int compare(State s1, State s2){
-					if(s1.cost <= s2.cost){
-						return -1;
-					}
-					return 1;
-				}
-			});
-			*/
 		}
 		
 		// Edge Case, if breeze at the starting position, climb out directly		
@@ -197,13 +166,20 @@ public class MyAI extends Agent
 			//printStatus();
 			return Action.CLIMB;
 		}
-
-		// Logic for only stench and arrow shoot
-		if((stench) && (arrow != 0) && !screamFlag){
-			arrow--;
-			if(!breeze){
-				markNextCellSafe(myAgent);
+		
+		// Edge Case, if stench at the starting position, shoot the arrow and move ahead	
+		if((stench) && (myAgent.X == 0 && myAgent.Y == 0) && (!breeze) && (arrow > 0)){	
+			
+			// increment the wumpus risk factor in stench neighbours [increment only for non-visited cells]
+			if(!myAgentWorld[myAgent.X][myAgent.Y].isVisited) {
+				incrementWumpusRiskFactorNeighbors(myAgent.X, myAgent.Y);
 			}
+			
+			markCellSafeAndVisited(myAgent.X, myAgent.Y);
+			
+			// Shoot the arrow
+			arrow--;
+			markNextCellSafe(myAgent);
 			return Action.SHOOT;
 		}
 
@@ -235,6 +211,34 @@ public class MyAI extends Agent
 				if(screamFlag && stench && !breeze){
 					markNeighborsSafe(myAgent.X, myAgent.Y);
 				}
+				
+				if(stench) {
+					// increment the wumpus risk factor in stench neighbours [increment only for non-visited cells]
+					if(!myAgentWorld[myAgent.X][myAgent.Y].isVisited) {
+						incrementWumpusRiskFactorNeighbors(myAgent.X, myAgent.Y);
+					}	
+					
+					// if you know the wumpus location, and you have the arrow, then kill the wumpus
+					if(wumpusLocatedFlag && (arrow > 0) && !breeze) {
+						State wumpusCell = myAgentWorld[Wumpus_X][Wumpus_Y];
+						Action currAction = getNextAction(wumpusCell, myAgent);
+						
+						if(currAction != Action.FORWARD) {
+							editAgentDirection(myAgent, currAction);
+							return currAction;
+						}
+						else {
+							arrow--;
+							markNextCellSafe(myAgent);
+							return Action.SHOOT;
+						}
+					}
+					
+					// if you know the wumpus location, then mark all stench neighbours safe except wumpus cell
+					if(wumpusLocatedFlag && !breeze && !myAgentWorld[myAgent.X][myAgent.Y].isVisited) {
+						markStenchNeighborsSafe(myAgent.X, myAgent.Y);
+					}
+				}
 			}
 
 			//mark itself safe and visited
@@ -243,10 +247,31 @@ public class MyAI extends Agent
 			//find the next adjacent unvisited safe cell
 			State nextUnvisitedSafeCell = getNextUnvisitedSafeCell(myAgent.X, myAgent.Y, myAgent.currentDirection);
 			
+			// reached start position after all the dead ends
 			if(path.isEmpty() && (nextUnvisitedSafeCell == null)){
 				return Action.CLIMB;
 			}
 			
+			// try to kill the wumpus using arrow by guestimating through the risk_factor values [when all the neighbours are unsafe].
+			if((nextUnvisitedSafeCell == null) && (stench) && (arrow > 0) && (!breeze)) {
+				State possible_wumpus_state = possibleWumpusState(myAgent.X, myAgent.Y, myAgent.currentDirection);
+				if(possible_wumpus_state != null) {
+					
+					Action currAction = getNextAction(possible_wumpus_state, myAgent);
+					
+					if(currAction != Action.FORWARD) {
+						editAgentDirection(myAgent, currAction);
+						return currAction;
+					}
+					else {
+						arrow--;
+						markNextCellSafe(myAgent);
+						return Action.SHOOT;
+					}
+				}
+			}
+			
+			// Pop from the stack and backtrace from the dead end
 			if(nextUnvisitedSafeCell == null){
 				State destState = path.peek();
 				Action currAction = getNextAction(destState, myAgent);
@@ -260,7 +285,6 @@ public class MyAI extends Agent
 					myAgent.Y = destState.Y;
 					path.pop();
 				}
-				//printStatus();
 				return currAction;
 			}
 			else{
@@ -275,17 +299,14 @@ public class MyAI extends Agent
 					myAgent.X = nextUnvisitedSafeCell.X;
 					myAgent.Y = nextUnvisitedSafeCell.Y;
 				}
-				//printStatus();
 				return currAction;
 			}
 		}
 		
 		
 		if(path.isEmpty()){
-			//printStatus();
 			return Action.CLIMB;
 		}
-		//printStatus();
 		return Action.CLIMB;
 	}
 	
@@ -300,28 +321,28 @@ public class MyAI extends Agent
 			case EAST:{
 				if(x+1 < Xmax && x+1 >= 0){
 					myAgentWorld[x+1][y].isSafe = true;
-					myAgentWorld[x+1][y].cost = x+1+y;
+					myAgentWorld[x+1][y].wumpusRiskFactor = -1;
 				}
 				break;
 			}
 			case WEST:{
 				if(x-1 < Xmax && x-1 >= 0){
 					myAgentWorld[x-1][y].isSafe = true;
-					myAgentWorld[x-1][y].cost = x-1+y;
+					myAgentWorld[x-1][y].wumpusRiskFactor = -1;
 				}
 				break;
 			}
 			case NORTH:{
 				if(y+1 < Ymax && y+1 >= 0){
 					myAgentWorld[x][y+1].isSafe = true;
-					myAgentWorld[x][y+1].cost = x+y+1;
+					myAgentWorld[x][y+1].wumpusRiskFactor = -1;
 				}
 				break;
 			}
 			case SOUTH:{
 				if(y-1 < Ymax && y-1 >= 0){
 					myAgentWorld[x][y-1].isSafe = true;
-					myAgentWorld[x][y-1].cost = x+y-1;
+					myAgentWorld[x][y-1].wumpusRiskFactor = -1;
 				}
 				break;
 			}
@@ -393,6 +414,48 @@ public class MyAI extends Agent
 		
 		return null;
 	}
+	
+	// Guestimate possible Wumpus state Neighbour on the basis of risk factor
+	private State possibleWumpusState(int x, int y, Directions agentsCurrentDirection) {
+		
+		State state = myAgentWorld[x][y];
+		int max_so_far = -1;
+		
+		if((x+1 < Xmax && x+1 >= 0) && (myAgentWorld[x+1][y].wumpusRiskFactor != -1)){
+			if(myAgentWorld[x+1][y].wumpusRiskFactor > max_so_far) {
+				max_so_far = myAgentWorld[x+1][y].wumpusRiskFactor;
+				state = myAgentWorld[x+1][y];
+			}
+		}
+		
+		if((y+1 < Ymax && y+1 >= 0) && (myAgentWorld[x][y+1].wumpusRiskFactor != -1)){
+			if(myAgentWorld[x][y+1].wumpusRiskFactor > max_so_far) {
+				max_so_far = myAgentWorld[x][y+1].wumpusRiskFactor;
+				state = myAgentWorld[x][y+1];
+			}
+		}
+		
+		if((x-1 < Xmax && x-1 >= 0) && (myAgentWorld[x-1][y].wumpusRiskFactor != -1)){
+				if(myAgentWorld[x-1][y].wumpusRiskFactor > max_so_far) {
+					max_so_far = myAgentWorld[x-1][y].wumpusRiskFactor;
+					state = myAgentWorld[x-1][y];
+				}
+		}
+		
+		if((y-1 < Ymax && y-1 >= 0) && (myAgentWorld[x][y-1].wumpusRiskFactor != -1)){
+			if(myAgentWorld[x][y-1].wumpusRiskFactor > max_so_far) {
+				max_so_far = myAgentWorld[x][y-1].wumpusRiskFactor;
+				state = myAgentWorld[x][y-1];
+			}
+		}
+		
+		// No unvisited neighbour found	
+		if(max_so_far == -1)
+			return null;
+		
+		return state;
+	}
+
 
 	// Helper Functions
 	private State goEast(int x, int y){
@@ -438,7 +501,7 @@ public class MyAI extends Agent
 		return null;
 	}
 
-	// get Next Unvisited Safe Cell for DFS
+	// get Next Unvisited Safe Cell for forwarding DFS algorithm
 	private State getNextUnvisitedSafeCell(int x, int y, Directions agentsCurrentDirection) {
 		if(agentsCurrentDirection == Directions.EAST){
 			State east = goEast(x, y);
@@ -520,7 +583,7 @@ public class MyAI extends Agent
 		State currentCell = myAgentWorld[x][y];
 		currentCell.isSafe = true;
 		currentCell.isVisited = true;
-		myAgentWorld[x][y].cost = x+y;
+		currentCell.wumpusRiskFactor = -1;
 	}
 	
 	// Mark isVisitedReturn and isSafe flags as true
@@ -528,7 +591,7 @@ public class MyAI extends Agent
 		State currentCell = myAgentWorld[x][y];
 		currentCell.isSafe = true;
 		currentCell.isVisitedReturn = true;
-		myAgentWorld[x][y].cost = x+y;
+		currentCell.wumpusRiskFactor = -1;
 	}
 
 	// editAgentDirection on the basis of rotation action
@@ -560,6 +623,7 @@ public class MyAI extends Agent
 		
 	}
 	
+	// get Agent's current Direction
 	private Directions getDirections(int val) {
 		switch(val){
 			case 0: {
@@ -579,9 +643,8 @@ public class MyAI extends Agent
 
 	}
 
-	// getNextaction of agent on the basis of next adjacent state
+	// get Next move for the agent on the basis of next state to go
 	private Action getNextAction(State state, MyAgent myAgent) {
-		// TODO Auto-generated method stub
 		
 		Directions desiredDirection = null;
 		
@@ -642,19 +705,109 @@ public class MyAI extends Agent
 	private void markNeighborsSafe(int x, int y) {
 		if(x+1 < Xmax && x+1 >= 0){
 			myAgentWorld[x+1][y].isSafe = true;
-			myAgentWorld[x+1][y].cost = x+1+y;
+			myAgentWorld[x+1][y].wumpusRiskFactor = -1;
 		}
 		if(x-1 < Xmax && x-1 >= 0){
 			myAgentWorld[x-1][y].isSafe = true;
-			myAgentWorld[x-1][y].cost = x-1+y;
+			myAgentWorld[x-1][y].wumpusRiskFactor = -1;
 		}
 		if(y+1 < Ymax && y+1 >= 0){
 			myAgentWorld[x][y+1].isSafe = true;
-			myAgentWorld[x][y+1].cost = x+y+1;
+			myAgentWorld[x][y+1].wumpusRiskFactor = -1;
 		}
 		if(y-1 < Ymax && y-1 >= 0){
 			myAgentWorld[x][y-1].isSafe = true;
-			myAgentWorld[x][y-1].cost = x+y-1;
+			myAgentWorld[x][y-1].wumpusRiskFactor = -1;
+		}
+	}
+	
+	// Mark Stench Neighbours Safe Except Wumpus Cell Neighbour
+	private void markStenchNeighborsSafe(int x, int y) {
+		if(x+1 < Xmax && x+1 >= 0){
+			if(!((x+1 == Wumpus_X) && (y == Wumpus_Y))) {
+				myAgentWorld[x+1][y].isSafe = true;
+				myAgentWorld[x+1][y].wumpusRiskFactor = -1;
+			}
+		}
+		if(x-1 < Xmax && x-1 >= 0){
+			if(!((x-1 == Wumpus_X) && (y == Wumpus_Y))) {
+				myAgentWorld[x-1][y].isSafe = true;
+				myAgentWorld[x-1][y].wumpusRiskFactor = -1;
+			}
+		}
+		if(y+1 < Ymax && y+1 >= 0){
+			if(!((x == Wumpus_X) && (y+1 == Wumpus_Y))) {
+				myAgentWorld[x][y+1].isSafe = true;
+				myAgentWorld[x][y+1].wumpusRiskFactor = -1;
+			}
+		}
+		if(y-1 < Ymax && y-1 >= 0){
+			if(!((x == Wumpus_X) && (y-1 == Wumpus_Y))) {
+				myAgentWorld[x][y-1].isSafe = true;
+				myAgentWorld[x][y-1].wumpusRiskFactor = -1;
+			}
+		}
+	}
+	
+	// Increase Wumpus Risk Factor for Neighbours [for only unvisited stench]
+	private void incrementWumpusRiskFactorNeighbors(int x, int y) {
+		
+		int num_of_risky_cells_count = 0;
+		
+		if(x+1 < Xmax && x+1 >= 0){
+			if(myAgentWorld[x+1][y].wumpusRiskFactor != -1) {
+				myAgentWorld[x+1][y].wumpusRiskFactor++;
+				
+				if(myAgentWorld[x+1][y].wumpusRiskFactor >= 2) {
+					num_of_risky_cells_count++;
+					wumpusLocatedFlag = true;
+					Wumpus_X = x+1;
+					Wumpus_Y = y;
+				}
+			}
+		}
+		
+		if(x-1 < Xmax && x-1 >= 0){
+			if(myAgentWorld[x-1][y].wumpusRiskFactor != -1) {
+				myAgentWorld[x-1][y].wumpusRiskFactor++;
+				if(myAgentWorld[x-1][y].wumpusRiskFactor >= 2) {
+					num_of_risky_cells_count++;
+					wumpusLocatedFlag = true;
+					Wumpus_X = x-1;
+					Wumpus_Y = y;
+				}
+			}
+		}
+		if(y+1 < Ymax && y+1 >= 0){
+			if(myAgentWorld[x][y+1].wumpusRiskFactor != -1) {
+				myAgentWorld[x][y+1].wumpusRiskFactor++;
+				if(myAgentWorld[x][y+1].wumpusRiskFactor >= 2) {
+					num_of_risky_cells_count++;
+					wumpusLocatedFlag = true;
+					Wumpus_X = x;
+					Wumpus_Y = y+1;
+				}
+			}
+		}
+		if(y-1 < Ymax && y-1 >= 0){
+			if(myAgentWorld[x][y-1].wumpusRiskFactor != -1) {
+				myAgentWorld[x][y-1].wumpusRiskFactor++;
+				if(myAgentWorld[x][y-1].wumpusRiskFactor >= 2) {
+					num_of_risky_cells_count++;
+					wumpusLocatedFlag = true;
+					Wumpus_X = x;
+					Wumpus_Y = y-1;
+				}
+			}
+		}
+		
+		// Sanity Check whether we have located wumpus 100% or not
+		if(wumpusLocatedFlag) {
+			if(num_of_risky_cells_count > 1) {
+				wumpusLocatedFlag = false;
+				Wumpus_X = -1;
+				Wumpus_Y = -1;
+			}
 		}
 	}
 }
